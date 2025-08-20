@@ -1,0 +1,133 @@
+events:
+  - summary: Shrewsbury Folk Festival
+    start: 2025-08-22
+    end: 2025-08-25
+    location: West Mid Showground, Shrewsbury
+    url: https://shrewsburyfolkfestival.co.uk/home/
+    description: Folk, Americana, dance, sessions; family-friendly.
+
+  - summary: Shrewsbury Steam Rally (Steam Festival)
+    start: 2025-08-24
+    end: 2025-08-25
+    location: Onslow Park, Shrewsbury
+    url: https://www.shrewsburysteamrally.co.uk/
+    description: Traction engines, vintage vehicles & arena displays.
+
+  - summary: Ludlow Food Festival
+    start: 2025-09-12
+    end: 2025-09-14
+    location: Ludlow Castle, Ludlow
+    url: https://www.ludlowfoodfestival.co.uk/
+    description: Flagship food & drink festival for the Marches.
+
+  - summary: Severn Valley Railway: Autumn Steam Gala
+    start: 2025-09-18
+    end: 2025-09-21
+    location: SVR line (incl. Bridgnorth)
+    url: https://svr.co.uk/event/autumn-steam-gala-2025/
+    description: Visiting locomotives & intensive timetable.
+
+  - summary: Shropshire Oktoberfest
+    start: 2025-10-03
+    end: 2025-10-04
+    location: The Quarry, Shrewsbury
+    url: https://www.shropshireoktoberfest.co.uk/
+    description: 150+ ales, live music, comedy & street food.
+
+  - summary: Oswestry 10K
+    start: 2025-10-12
+    end: 2025-10-12
+    location: Oswestry Town Centre
+    url: https://www.adrenalinesportingevents.co.uk/oswestry-10k-run-running-event/
+    description: Popular closed-roads 10K.
+
+  - summary: Pumpkin Trail & Games
+    start: 2025-10-25
+    end: 2025-11-02
+    location: Ludlow Castle, Ludlow
+    url: https://www.ludlowcastle.com/events/pumpkin-trail-and-games/
+    description: Half-term family fun around the castle.
+
+  - summary: Oswestry Fireworks Display
+    start: 2025-11-01
+    end: 2025-11-01
+    location: Cae Glas Park, Oswestry
+    url: https://www.oswestry-tc.gov.uk/council_events/oswestry-fireworks-display/
+    description: Low-noise fireworks & laser show (Oswestry Town Council).
+
+  - summary: Shrewsbury Charity Bonfire & Fireworks Spectacular
+    start: 2025-11-02
+    end: 2025-11-02
+    location: DMOS People West Mid Showground, Shrewsbury
+    url: https://www.westmidshowground.co.uk/news/tickets-go-on-sale-for-charity-bonfire-spectacular-featuring-90s-chart-topper-the-tamperer/
+    description: Two displays plus live music; charity fundraiser.
+
+  - summary: Ludlow Christmas Fair (League of Friends)
+    start: 2025-11-17
+    end: 2025-11-18
+    location: Ludlow Racecourse, Ludlow
+    url: https://www.ludlowchristmasfair.co.uk/
+    description: Evening Mon 17th (18:00–20:00) & daytime Tue 18th (09:30–15:30).
+
+  - summary: Bridgnorth Christmas Lights Switch-On
+    start: 2025-11-28
+    end: 2025-11-28
+    location: High Street, Bridgnorth
+    url: https://www.bridgnorthtowncouncil.gov.uk/council_events/christmas-light-switch-on-2025-2/
+    description: Town centre lights switch-on & street entertainment (16:00–20:00).
+
+  - summary: Ludlow Winter Festival
+    start: 2025-11-28
+    end: 2025-11-30
+    location: Ludlow town centre & Castle
+    url: https://www.ludlow.gov.uk/visit-ludlow/festivals
+    description: Music, trails & lights switch-on across town.
+
+  - summary: Panto: Dick Whittington (Theatre Severn)
+    start: 2025-11-28
+    end: 2026-01-04
+    location: Theatre Severn, Shrewsbury
+    url: https://www.theatresevern.co.uk/shows/whatson/dick-whittington
+    description: Family pantomime season at Theatre Severn.
+
+  - summary: Much Wenlock Christmas Fayre
+    start: 2025-12-06
+    end: 2025-12-06
+    location: Much Wenlock Town Centre
+    url: https://wenlockchristmasfayre.org.uk/
+    description: Community Christmas fayre (10:00–17:00).
+
+  - summary: Made in Shropshire – Extra Christmas Fair in the Square
+    start: 2025-12-06
+    end: 2025-12-06
+    location: The Square, Shrewsbury
+    url: https://www.madeinshropshire.org/2025-event-listing/
+    description: Artisan makers’ market (20th anniversary year).
+
+  - summary: Shrewsbury Winter Wonderland (at the Prison)
+    start: 2025-12-07
+    end: 2025-12-08
+    location: Shrewsbury Prison
+    url: https://www.shrewsburyprison.com/events/shrewsbury-winter-wonderland/
+    description: Festive market, live stage & family activities.
+
+  - summary: SVR “Elf Express” – selected dates
+    start: 2025-11-29
+    end: 2025-12-24
+    location: Severn Valley Railway (from Bridgnorth and other stations)
+    url: https://svr.co.uk/series/the-elf-express/
+    description: Festive trains on selected dates — see timetable.
+
+  - summary: Christmas at Attingham Park
+    start: 2025-11-30
+    end: 2026-01-01
+    location: Attingham Park, Atcham
+    url: https://www.nationaltrust.org.uk/visit/shropshire-staffordshire/attingham-park/christmas-at-attingham
+    description: Decorated mansion, trails & Attingham at Dusk (timed tickets).
+
+  - summary: Shrewsbury Farmers’ Market – Christmas Market
+    start: 2025-12-19
+    end: 2025-12-20
+    location: The Square, Shrewsbury
+    url: https://www.myshrewsbury.co.uk/events/shrewsbury-farmers-market-christmas-market-2025-12-19-09-00/
+    description: Festive edition of the monthly market.

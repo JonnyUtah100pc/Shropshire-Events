@@ -1,0 +1,16 @@
+# data/sources.yaml — non-paginated starter (pre-pagination script ignores extra keys)
+sources:
+  - type: jsonld
+    url: https://originalshrewsbury.co.uk/events
+
+  - type: jsonld
+    url: https://www.theatresevern.co.uk/shows/whatson/
+
+  - type: jsonld
+    url: https://www.westmidshowground.co.uk/
+
+  - type: jsonld
+    url: https://www.ludlowcastle.com/events/
+
+  - type: jsonld
+    url: https://www.visitshropshire.co.uk/whats-on/
