@@ -1,0 +1,35 @@
+# Shropshire Events
+
+Welcome to the Shropshire Events repository!
+
+## Overview
+
+This project contains a homepage and a simple to-do list application (with local storage) for events in Shropshire.
+
+## Features
+
+- Static homepage (`index.html`)
+- To-do list application with local storage
+- Basic responsive design
+
+## Getting Started
+
+1. Clone the repository:
+   ```
+   git clone https://github.com/JonnyUtah100pc/Shropshire-Events.git
+   ```
+2. Open `index.html` in your web browser.
+
+## File Structure
+
+- `index.html` — Homepage and to-do list app
+- `styles.css` — Styles for the homepage and app
+- `app.js` — JavaScript for the to-do list functionality
+
+## Contributing
+
+Pull requests and suggestions are welcome!
+
+## License
+
+MIT
