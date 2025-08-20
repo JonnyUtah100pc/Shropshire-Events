@@ -11,6 +11,9 @@ on:
       - requirements.txt
       - .github/workflows/build-ics.yml
 
+permissions:
+  contents: write
+
 concurrency:
   group: build-ics
   cancel-in-progress: false
@@ -18,8 +21,6 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
 
     steps:
       - name: Checkout
@@ -37,11 +38,33 @@ jobs:
           python -m pip install --upgrade pip setuptools wheel
           pip install -r requirements.txt
 
+      - name: Validate YAML (sources & manual)
+        run: |
+          python - <<'PY'
+          import sys, yaml, os
+          def check(p):
+              if not os.path.exists(p):
+                  print(f"[warn] {p} missing (ok)"); return
+              try:
+                  yaml.safe_load(open(p, encoding="utf-8"))
+                  print(f"[ok] {p} parsed")
+              except Exception as e:
+                  print(f"[error] YAML parse failed in {p}: {e}")
+                  sys.exit(3)
+          check("data/sources.yaml")
+          check("data/manual.yaml")
+          PY
+
       - name: Build ICS
         run: python scripts/build_ics.py
 
-      - name: Commit & push (rebase if remote changed)
+      - name: Count events in ICS
         run: |
+          echo "VEVENT count: $(grep -c '^BEGIN:VEVENT' shropshire-events.ics || echo 0)"
+
+      - name: Commit & push (resilient)
+        run: |
+          set -e
           git config user.name "github-actions"
           git config user.email "actions@users.noreply.github.com"
           git add shropshire-events.ics data/state.json || true
@@ -50,7 +73,10 @@ jobs:
             exit 0
           fi
           git commit -m "auto: refresh ICS"
-          git fetch origin main
-          git rebase origin/main || (git rebase --abort && exit 1)
-          git push origin HEAD:main
-
+          # Try a straight push first
+          if git push origin HEAD:main; then
+            exit 0
+          fi
+          echo "Push rejected; rebasing…"
+          git pull --rebase origin main || true
+          git push origin HEAD:main || git push --force-with-lease origin HEAD:main
