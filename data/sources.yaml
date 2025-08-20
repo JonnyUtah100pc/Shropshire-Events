@@ -4,97 +4,82 @@
 # You can list multiple options with commas (the scraper uses select_one()).
 
 sources:
-  # ——— SHREWSBURY-FOCUSED ———
+  # ——— Shrewsbury-first ———
   - type: jsonld
     url: https://originalshrewsbury.co.uk/events
-    paginate:
-      next_selector: 'a[rel="next"], a.next, .pagination__next, .pager__next a'
-      max_pages: 12
+    paginate: { next_selector: 'a[rel="next"], a.next, .pagination__next, .pager__next a', max_pages: 12 }
+    force_html: true
 
   - type: jsonld
     url: https://www.theatresevern.co.uk/shows/whatson/
-    paginate:
-      next_selector: 'a[rel="next"], a.next, a[aria-label="Next"]'
-    # Some productions list far in advance; raise max_pages if needed.
-      max_pages: 12
+    paginate: { next_selector: 'a[rel="next"], a.next, a[aria-label="Next"]', max_pages: 12 }
+    force_html: true
 
   - type: jsonld
     url: https://www.westmidshowground.co.uk/
-    # Often a single page; add paginate if the site adds a Next link later.
+    force_html: true
 
   - type: jsonld
     url: https://www.shrewsburyprison.com/events/
-    paginate:
-      next_selector: 'a[rel="next"], a.next'
-      max_pages: 12
+    paginate: { next_selector: 'a[rel="next"], a.next', max_pages: 12 }
+    force_html: true
 
   - type: jsonld
     url: https://shrewsburyfolkfestival.co.uk/home/
-    # Festival site (usually static around event dates) — no pagination.
+    force_html: true
 
   - type: jsonld
     url: https://www.nationaltrust.org.uk/visit/shropshire-staffordshire/attingham-park
-    # NT pages vary; if they add paging, enable:
-    # paginate:
-    #   next_selector: 'a[rel="next"], .pager__next a'
-    #   max_pages: 12
+    force_html: true
 
-  # ——— COUNTY-WIDE / NEARBY ———
+  # ——— Wider Shropshire ———
   - type: jsonld
     url: https://www.visitshropshire.co.uk/whats-on/
-    paginate:
-      next_selector: 'a[rel="next"], a.next, .pagination .next a'
-      max_pages: 12
+    paginate: { next_selector: 'a[rel="next"], a.next, .pagination .next a', max_pages: 12 }
+    force_html: true
 
   - type: jsonld
     url: https://www.ludlowcastle.com/events/
-    paginate:
-      next_selector: 'a[rel="next"], a.next, .pagination a.next'
-      max_pages: 12
+    paginate: { next_selector: 'a[rel="next"], a.next, .pagination a.next', max_pages: 12 }
+    force_html: true
 
   - type: jsonld
     url: https://www.ludlowfoodfestival.co.uk/
-    # Usually event-specific pages; leave without pagination.
+    force_html: true
 
   - type: jsonld
     url: https://www.ludlow.gov.uk/visit-ludlow/festivals
-    paginate:
-      next_selector: 'a[rel="next"], a.next'
-      max_pages: 12
+    paginate: { next_selector: 'a[rel="next"], a.next', max_pages: 12 }
+    force_html: true
 
   - type: jsonld
     url: https://svr.co.uk/whats-on/
-    paginate:
-      next_selector: 'a[rel="next"], a.next, [aria-label="Next"]'
-      max_pages: 12
+    paginate: { next_selector: 'a[rel="next"], a.next, [aria-label="Next"]', max_pages: 12 }
+    force_html: true
 
   - type: jsonld
     url: https://www.oswestry-tc.gov.uk/council_events/
-    paginate:
-      next_selector: 'a[rel="next"], a.next, .pagination .next a'
-      max_pages: 12
+    paginate: { next_selector: 'a[rel="next"], a.next, .pagination .next a', max_pages: 12 }
+    force_html: true
 
   - type: jsonld
     url: https://www.bridgnorthtowncouncil.gov.uk/council_events/
-    paginate:
-      next_selector: 'a[rel="next"], a.next, .pagination .next a'
-      max_pages: 12
+    paginate: { next_selector: 'a[rel="next"], a.next, .pagination .next a', max_pages: 12 }
+    force_html: true
 
   - type: jsonld
     url: https://www.ironbridge.org.uk/whats-on/
-    paginate:
-      next_selector: 'a[rel="next"], a.next, .pagination .next a'
-      max_pages: 12
+    paginate: { next_selector: 'a[rel="next"], a.next, .pagination .next a', max_pages: 12 }
+    force_html: true
 
   - type: jsonld
     url: https://www.shropshireoktoberfest.co.uk/
-    # Seasonal; keep simple.
+    force_html: true
 
   - type: jsonld
     url: https://www.myshrewsbury.co.uk/events/
-    paginate:
-      next_selector: 'a[rel="next"], a.next, .pagination .next a'
-      max_pages: 12
+    paginate: { next_selector: 'a[rel="next"], a.next, .pagination .next a', max_pages: 12 }
+    force_html: true
 
   # ——— (OPTIONAL) RSS/ICS if you find them — preferred when available ———
   # - type: rss
