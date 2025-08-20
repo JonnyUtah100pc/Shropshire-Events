@@ -1,20 +1,54 @@
-# .github/workflows/build-ics.yml
-name: Build ICS
+name: Build ICS (extended, 2-year window)
+
 on:
-  schedule: [{ cron: "0 6 * * *" }]  # 06:00 UTC daily
-  workflow_dispatch:
+  workflow_dispatch: {}            # run manually from the Actions tab
+  schedule:
+    - cron: "0 6 * * *"            # daily at 06:00 UTC
+  push:
+    paths:
+      - "scripts/**"
+      - "data/**"
+      - "requirements.txt"
+      - ".github/workflows/build-ics.yml"
+
+concurrency:
+  group: build-ics
+  cancel-in-progress: false
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with: { python-version: "3.11" }
-      - run: python scripts/build_ics.py  # generates shropshire_events_JonnyUtah100pc.ics with STABLE UIDs
-      - name: Commit changes
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Build ICS from official sources
+        run: python scripts/build_ics.py
+
+      - name: Commit & push if changed
         run: |
           git config user.name "github-actions"
           git config user.email "actions@users.noreply.github.com"
-          git add shropshire_events_JonnyUtah100pc.ics
-          git commit -m "auto: refresh ICS" || echo "No changes"
+          git add shrewsbury_events_JonnyUtah100pc.ics data/state.json || true
+          git diff --cached --quiet && echo "No changes to commit." || git commit -m "auto: refresh ICS"
           git push
