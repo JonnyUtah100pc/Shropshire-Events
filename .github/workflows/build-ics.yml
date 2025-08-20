@@ -1,72 +1,217 @@
-name: Build ICS (Shropshire events, 2-year window)
+#!/usr/bin/env python3
+# scripts/build_ics.py — pre-pagination, single output (shropshire-events.ics)
 
-on:
-  workflow_dispatch: {}
-  schedule:
-    - cron: "0 6 * * *"
-  push:
-    paths:
-      - "scripts/**"
-      - "data/**"
-      - "requirements.txt"
-      - ".github/workflows/build-ics.yml"
+import os, re, json, hashlib, unicodedata
+from datetime import datetime, timedelta, timezone
+from typing import Optional, List, Dict
 
-concurrency:
-  group: build-ics
-  cancel-in-progress: false
+import requests
+from bs4 import BeautifulSoup
+import yaml
 
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
+try:
+    import feedparser  # optional: RSS
+except Exception:
+    feedparser = None
 
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+try:
+    from icalendar import Calendar  # optional: ICS import
+except Exception:
+    Calendar = None
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
+# --- Repo / output settings ---------------------------------------------------
+USERNAME   = "JonnyUtah100pc"
+REPO       = "Shropshire-Events"
+HUB_URL    = f"https://{USERNAME}.github.io/{REPO}"
 
-      - name: Cache pip
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-
+CAL_NAME   = "Shropshire events"
+REPO_ROOT  = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+OUT_ICS    = os.path.join(REPO_ROOT, "shropshire-events.ics")   # single canonical output
+STATE_PATH = os.path.join(REPO_ROOT, "data", "state.json")
+SOURCES_YAML = os.path.join(REPO_ROOT, "data", "sources.yaml")
+MANUAL_YAML  = os.path.join(REPO_ROOT, "data", "manual.yaml")
 
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip setuptools wheel
-          pip install -r requirements.txt
+# --- Window (30 days back, 2 years ahead) ------------------------------------
+WINDOW_START = datetime.now(timezone.utc) - timedelta(days=30)
+WINDOW_END   = datetime.now(timezone.utc) + timedelta(days=730)
 
-      - name: Build ICS
-        run: python scripts/build_ics.py
+HEADERS = {
+    "User-Agent": f"Mozilla/5.0 (compatible; ShropshireICSBot/1.3; +{HUB_URL})"
+}
 
-      - name: Commit & push (rebase if remote changed)
-        run: |
-          git config user.name "github-actions"
-          git config user.email "actions@users.noreply.github.com"
-          git add shrewsbury_events_JonnyUtah100pc.ics shropshire-events.ics data/state.json || true
-          if git diff --cached --quiet; then
-            echo "No changes to commit."
-            exit 0
-          fi
-          git commit -m "auto: refresh ICS (Shropshire events, 2-year window)"
-          git fetch origin main
-          git rebase origin/main || (git rebase --abort && exit 1)
-          for i in 1 2 3; do
-            if git push origin HEAD:main; then
-              exit 0
-            fi
-            echo "Push failed (attempt $i). Rebasing and retrying..."
-            git fetch origin main
-            git rebase origin/main || (git rebase --abort && exit 1)
-          done
-          echo "Push still failing after retries." >&2
-          exit 1
+# Hints to boost Shrewsbury events
+SHREWSBURY_HINTS = [
+    "shrewsbury", "originalshrewsbury", "theatresevern", "westmidshowground",
+    "shrewsburyprison", "shrewsburyfolkfestival", "attingham", "the-quarry"
+]
+
+# ------------------------------------------------------------------------------
+def log(*a): print("[build_ics]", *a)
+
+def slugify(text: str) -> str:
+    text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode("ascii")
+    text = re.sub(r"[^a-zA-Z0-9]+", "-", text).strip("-").lower()
+    text = re.sub(r"-{2,}", "-", text)
+    return text or "event"
+
+def parse_date_any(s: str) -> Optional[datetime]:
+    if not s:
+        return None
+    s = s.strip()
+    fmts = [
+        "%Y-%m-%dT%H:%M:%S%z",
+        "%Y-%m-%dT%H:%M:%S.%f%z",
+        "%Y-%m-%dT%H:%M%z",
+        "%Y-%m-%dT%H:%M:%S",
+        "%Y-%m-%d",
+    ]
+    for fmt in fmts:
+        try:
+            dt = datetime.strptime(s, fmt)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            else:
+                dt = dt.astimezone(timezone.utc)
+            return dt
+        except Exception:
+            pass
+    if s.endswith("Z"):
+        try:
+            return datetime.fromisoformat(s.replace("Z", "+00:00"))
+        except Exception:
+            pass
+    m = re.match(r"^(\d{4})-(\d{2})-(\d{2})$", s)
+    if m:
+        y, mo, d = map(int, m.groups())
+        return datetime(y, mo, d, tzinfo=timezone.utc)
+    return None
+
+def escape_ics(text: str) -> str:
+    return str(text).replace("\\", "\\\\").replace(",", "\\,").replace(";", "\\;").replace("\n", "\\n")
+
+def fetch(url: str) -> Optional[str]:
+    try:
+        r = requests.get(url, headers=HEADERS, timeout=25)
+        if r.status_code == 200 and r.text:
+            return r.text
+        log("HTTP", r.status_code, "for", url)
+    except Exception as ex:
+        log("ERR", ex, "for", url)
+    return None
+
+# --- Extractors ---------------------------------------------------------------
+def extract_events_from_jsonld(html: str, base_url: str) -> List[Dict]:
+    out: List[Dict] = []
+    if not html:
+        return out
+    soup = BeautifulSoup(html, "lxml")
+    for tag in soup.find_all("script", {"type": "application/ld+json"}):
+        try:
+            import json as _json
+            raw = tag.string or "{}"
+            data = _json.loads(raw)
+        except Exception:
+            continue
+        items = data.get("@graph") if isinstance(data, dict) and "@graph" in data else data
+        if not isinstance(items, list):
+            items = [data]
+        for item in items:
+            t = item.get("@type")
+            tlist = [t] if not isinstance(t, list) else t
+            if not any(str(x).lower() == "event" for x in tlist if x):
+                continue
+            name = item.get("name") or item.get("headline") or "Event"
+            start = item.get("startDate") or item.get("start") or item.get("startTime")
+            end = item.get("endDate") or item.get("end") or item.get("endTime") or start
+            url = item.get("url") or base_url
+            loc = ""
+            location = item.get("location")
+            if isinstance(location, dict):
+                loc = location.get("name") or ""
+                addr = location.get("address")
+                if isinstance(addr, dict):
+                    parts = [addr.get(k, "") for k in ["streetAddress","addressLocality","addressRegion","postalCode"]]
+                    loc = (loc + ", " + ", ".join([p for p in parts if p])).strip(", ")
+            desc = item.get("description") or ""
+            out.append({"summary": name, "start": start, "end": end, "url": url, "location": loc, "description": desc})
+    return out
+
+def extract_events_from_rss(url: str) -> List[Dict]:
+    if feedparser is None:
+        return []
+    try:
+        feed = feedparser.parse(url)
+    except Exception:
+        return []
+    res = []
+    for e in feed.entries:
+        title = getattr(e, "title", None) or "Event"
+        link = getattr(e, "link", url)
+        desc = getattr(e, "summary", "") or getattr(e, "description", "")
+        start = getattr(e, "start_date", None) or getattr(e, "published", None)
+        end = getattr(e, "end_date", None) or start
+        res.append({"summary": title, "start": start, "end": end, "url": link, "location": "", "description": desc})
+    return res
+
+def extract_events_from_ics(url: str) -> List[Dict]:
+    if Calendar is None:
+        return []
+    try:
+        r = requests.get(url, headers=HEADERS, timeout=25)
+        if r.status_code != 200:
+            return []
+        cal = Calendar.from_ical(r.content)
+    except Exception:
+        return []
+    out = []
+    from datetime import datetime as dt
+    for comp in cal.walk():
+        if comp.name != "VEVENT":
+            continue
+        summary = str(comp.get("summary", "Event"))
+        desc    = str(comp.get("description", ""))
+        loc     = str(comp.get("location", ""))
+        link    = str(comp.get("url", "")) or url
+        s       = comp.get("dtstart")
+        e       = comp.get("dtend") or s
+        sdt     = getattr(s, "dt", None)
+        edt     = getattr(e, "dt", None)
+        if sdt is None:
+            continue
+        if hasattr(sdt, "year") and not hasattr(sdt, "hour"):
+            sdt = dt(sdt.year, sdt.month, sdt.day, tzinfo=timezone.utc)
+        if edt is None:
+            edt = sdt
+        if hasattr(edt, "year") and not hasattr(edt, "hour"):
+            edt = dt(edt.year, edt.month, edt.day, tzinfo=timezone.utc)
+        out.append({"summary": summary, "start": sdt.isoformat(), "end": edt.isoformat(),
+                    "url": link, "location": loc, "description": desc})
+    return out
+
+# --- Helpers ------------------------------------------------------------------
+def is_shrewsbury_hit(e: Dict) -> bool:
+    text = " ".join([str(e.get("location", "")), str(e.get("url", "")), str(e.get("summary", ""))]).lower()
+    return any(h in text for h in SHREWSBURY_HINTS)
+
+def filter_window(evs: List[Dict]) -> List[Dict]:
+    out = []
+    for e in evs:
+        sdt = parse_date_any(e.get("start", ""))
+        edt = parse_date_any(e.get("end", "")) or sdt
+        if not sdt:
+            continue
+        if edt < WINDOW_START or sdt > WINDOW_END:
+            continue
+        e["_sdt"], e["_edt"] = sdt, edt
+        e["_is_shrewsbury"] = is_shrewsbury_hit(e)
+        out.append(e)
+    return out
+
+def load_yaml(path: str) -> Dict:
+    if not os.path.exists(path):
+        return {}
+    with open(path, "r", encoding="utf-8") as f:
+        return yaml.safe_load(f) or {}
+
+def read_manual(path: str) -> List[Dict]:
+    data = load_ya_
