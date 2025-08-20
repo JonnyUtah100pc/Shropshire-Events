@@ -4,3 +4,4 @@ lxml
 PyYAML
 feedparser
 icalendar
+python-dateutil
