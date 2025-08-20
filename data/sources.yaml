@@ -1,0 +1,11 @@
+sources:
+- type: jsonld
+  url: https://www.ludlowcastle.com/events/
+- type: jsonld
+  url: https://svr.co.uk/whats-on/
+- type: jsonld
+  url: https://www.theatresevern.co.uk/shows/whatson/
+- type: jsonld
+  url: https://www.nationaltrust.org.uk/visit/shropshire-staffordshire/attingham-park
+- type: jsonld
+  url: https://originalshrewsbury.co.uk/events
