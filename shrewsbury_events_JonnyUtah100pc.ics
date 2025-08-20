@@ -4,12 +4,12 @@ PRODID:-//Shropshire Events Bot//EN
 CALSCALE:GREGORIAN
 X-WR-CALNAME:Shrewsbury & Shropshire Events
 X-WR-TIMEZONE:Europe/London
-URL:https://JonnyUtah100pc.github.io/shropshire-events
+URL:https://JonnyUtah100pc.github.io/Shropshire-Events
 REFRESH-INTERVAL;VALUE=DURATION:P1D
 X-PUBLISHED-TTL:PT12H
 BEGIN:VEVENT
 UID:shrewsbury-steam-rally-steam-festival-2025@JonnyUtah100pc.github.io
-DTSTAMP:20250820T170041Z
+DTSTAMP:20250820T170946Z
 SEQUENCE:0
 DTSTART;VALUE=DATE:20250824
 DTEND;VALUE=DATE:20250826
