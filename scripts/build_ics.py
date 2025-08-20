@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-# scripts/build_ics.py — single output (shropshire-events.ics) with pagination
+# scripts/build_ics.py — single output (shropshire-events.ics) with pagination + HTML fallback
 
 import os, re, json, hashlib, unicodedata
 from datetime import datetime, timedelta, timezone
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Tuple
 from urllib.parse import urljoin
 
 import requests
@@ -19,6 +19,11 @@ try:
     from icalendar import Calendar  # optional (ICS import)
 except Exception:
     Calendar = None
+
+try:
+    from dateutil import parser as dateparser  # for free-text dates in HTML fallback
+except Exception:
+    dateparser = None
 
 # --- Repo / output settings ---------------------------------------------------
 USERNAME   = "JonnyUtah100pc"
@@ -37,7 +42,7 @@ WINDOW_START = datetime.now(timezone.utc) - timedelta(days=30)
 WINDOW_END   = datetime.now(timezone.utc) + timedelta(days=730)
 
 HEADERS = {
-    "User-Agent": f"Mozilla/5.0 (compatible; ShropshireICSBot/1.4; +{HUB_URL})"
+    "User-Agent": f"Mozilla/5.0 (compatible; ShropshireICSBot/1.5; +{HUB_URL})"
 }
 
 # Hints to boost Shrewsbury events
@@ -56,6 +61,7 @@ def slugify(text: str) -> str:
     return text or "event"
 
 def parse_date_any(s: str) -> Optional[datetime]:
+    """Parse strict ISO-ish strings (JSON-LD/ICS)."""
     if not s:
         return None
     s = s.strip()
@@ -87,6 +93,51 @@ def parse_date_any(s: str) -> Optional[datetime]:
         return datetime(y, mo, d, tzinfo=timezone.utc)
     return None
 
+def parse_dates_from_text(text: str) -> Tuple[Optional[datetime], Optional[datetime]]:
+    """
+    Very forgiving date range parser for HTML fallback.
+    Tries common '22–25 Aug 2025' / '12 Sep - 14 Sep 2025' / '1–3 Dec' patterns, else a single date.
+    """
+    if not text or not dateparser:
+        return None, None
+    t = " ".join(text.split())
+    # explicit two-date patterns with month names
+    patterns = [
+        r"(\d{1,2}\s+[A-Za-z]{3,9}\s+\d{4})\s*(?:–|-|to)\s*(\d{1,2}\s+[A-Za-z]{3,9}\s+\d{4})",
+        r"(\d{1,2}\s+[A-Za-z]{3,9})\s*(?:–|-|to)\s*(\d{1,2}\s+[A-Za-z]{3,9}\s+\d{4})",
+        r"(\d{1,2})\s*(?:–|-|to)\s*(\d{1,2})\s+([A-Za-z]{3,9})\s+(\d{4})",
+        r"(\d{1,2})\s*(?:–|-|to)\s*(\d{1,2})\s+([A-Za-z]{3,9})",
+    ]
+    for pat in patterns:
+        m = re.search(pat, t, flags=re.IGNORECASE)
+        if m:
+            try:
+                if len(m.groups()) == 2:
+                    s = dateparser.parse(m.group(1), dayfirst=True, fuzzy=True)
+                    e = dateparser.parse(m.group(2), dayfirst=True, fuzzy=True)
+                elif len(m.groups()) == 4:
+                    d1, d2, mon, year = m.group(1), m.group(2), m.group(3), m.group(4)
+                    s = dateparser.parse(f"{d1} {mon} {year}", dayfirst=True, fuzzy=True)
+                    e = dateparser.parse(f"{d2} {mon} {year}", dayfirst=True, fuzzy=True)
+                else:
+                    d1, d2, mon = m.group(1), m.group(2), m.group(3)
+                    # guess year (this/next) to land inside our window
+                    base_year = WINDOW_START.year if WINDOW_START.month <= WINDOW_END.month else datetime.now().year
+                    s = dateparser.parse(f"{d1} {mon} {base_year}", dayfirst=True, fuzzy=True)
+                    e = dateparser.parse(f"{d2} {mon} {base_year}", dayfirst=True, fuzzy=True)
+                s = s.replace(tzinfo=timezone.utc)
+                e = e.replace(tzinfo=timezone.utc)
+                return s, e
+            except Exception:
+                pass
+    # single date
+    try:
+        s = dateparser.parse(t, dayfirst=True, fuzzy=True)
+        s = s.replace(tzinfo=timezone.utc)
+        return s, s
+    except Exception:
+        return None, None
+
 def escape_ics(text: str) -> str:
     return str(text).replace("\\", "\\\\").replace(",", "\\,").replace(";", "\\;").replace("\n", "\\n")
 
@@ -101,42 +152,39 @@ def fetch(url: str) -> Optional[str]:
     return None
 
 # --- Pagination helpers -------------------------------------------------------
-def fetch_pages_with_next(url: str, next_selector: str, max_pages: int = 12) -> List[str]:
+def fetch_pages_with_next(url: str, next_selector: str, max_pages: int = 12) -> List[Tuple[str,str]]:
     """
-    Follow 'next' links by CSS selector; return a list of HTML pages (including the first).
+    Follow 'next' links by CSS selector; return list of (url, html) including the first.
     """
-    pages_html: List[str] = []
-    seen_urls = set()
-    current_url = url
+    pages: List[Tuple[str,str]] = []
+    seen = set()
+    current = url
     base_for_join = url
     for _ in range(max_pages):
-        if not current_url or current_url in seen_urls:
+        if not current or current in seen:
             break
-        seen_urls.add(current_url)
-        html = fetch(current_url)
+        seen.add(current)
+        html = fetch(current)
         if not html:
             break
-        pages_html.append(html)
+        pages.append((current, html))
         try:
             soup = BeautifulSoup(html, "lxml")
             nxt = soup.select_one(next_selector)
             if nxt and nxt.get("href"):
-                current_url = urljoin(base_for_join, nxt.get("href"))
+                current = urljoin(base_for_join, nxt.get("href"))
             else:
                 break
         except Exception:
             break
-    return pages_html
+    return pages
 
-def expand_paginated_jsonld(url: str, paginate_cfg: Optional[Dict]) -> List[str]:
-    """
-    Return HTML pages to parse for JSON-LD (single page or follow 'next').
-    """
+def get_pages(url: str, paginate_cfg: Optional[Dict]) -> List[Tuple[str,str]]:
     if paginate_cfg and "next_selector" in paginate_cfg:
         max_pages = int(paginate_cfg.get("max_pages", 12))
         return fetch_pages_with_next(url, paginate_cfg["next_selector"], max_pages)
     html = fetch(url)
-    return [html] if html else []
+    return [(url, html)] if html else []
 
 # --- Extractors ---------------------------------------------------------------
 def extract_events_from_jsonld_html(html: str, base_url: str) -> List[Dict]:
@@ -173,6 +221,85 @@ def extract_events_from_jsonld_html(html: str, base_url: str) -> List[Dict]:
                     loc = (loc + ", " + ", ".join([p for p in parts if p])).strip(", ")
             desc = item.get("description") or ""
             out.append({"summary": name, "start": start, "end": end, "url": url, "location": loc, "description": desc})
+    return out
+
+def html_fallback_extract(html: str, base_url: str, cfg: Optional[Dict]) -> List[Dict]:
+    """
+    Heuristic HTML extraction:
+    - If cfg provided, use its CSS selectors.
+    - Else, try generic guesses for cards/listings with date/text.
+    cfg keys: event, title, link, date, end, location, description
+    """
+    out: List[Dict] = []
+    if not html:
+        return out
+    soup = BeautifulSoup(html, "lxml")
+
+    def text_of(node):
+        return " ".join((node.get_text(" ", strip=True) if node else "").split())
+
+    def sel(node, selector):
+        return node.select_one(selector) if (node and selector) else None
+
+    blocks = []
+    if cfg and cfg.get("event"):
+        blocks = soup.select(cfg["event"])
+    else:
+        # generic guesses
+        guesses = [
+            ".event, .events-list .event",
+            ".event-card, .card--event, .c-event, .teaser--event",
+            "li.event, li.article--event, article.event",
+            ".listing .item, .events .item, .grid .card",
+        ]
+        for g in guesses:
+            blocks = soup.select(g)
+            if len(blocks) >= 3:
+                break
+
+    for b in blocks:
+        title_el = sel(b, cfg.get("title")) if cfg and cfg.get("title") else (b.select_one("h3, h2, .title, .card__title") or None)
+        link_el  = sel(b, cfg.get("link"))  if cfg and cfg.get("link")  else (title_el.select_one("a") if title_el else b.select_one("a"))
+        date_el  = sel(b, cfg.get("date"))  if cfg and cfg.get("date")  else (b.select_one("time, .date, .event-date"))
+        end_el   = sel(b, cfg.get("end"))   if cfg and cfg.get("end")   else None
+        loc_el   = sel(b, cfg.get("location")) if cfg and cfg.get("location") else (b.select_one(".location, .venue"))
+        desc_el  = sel(b, cfg.get("description")) if cfg and cfg.get("description") else (b.select_one(".summary, .excerpt, p"))
+
+        title = text_of(title_el) or text_of(link_el) or "Event"
+        href  = link_el.get("href") if link_el and link_el.has_attr("href") else ""
+        url   = urljoin(base_url, href) if href else base_url
+
+        # dates: end date selector overrides; else parse from combined date text
+        sdt = edt = None
+        if date_el or end_el:
+            s_text = text_of(date_el)
+            e_text = text_of(end_el) if end_el else ""
+            if s_text and e_text and dateparser:
+                try:
+                    sdt = dateparser.parse(s_text, dayfirst=True, fuzzy=True).replace(tzinfo=timezone.utc)
+                    edt = dateparser.parse(e_text, dayfirst=True, fuzzy=True).replace(tzinfo=timezone.utc)
+                except Exception:
+                    pass
+            if sdt is None:
+                sdt, edt = parse_dates_from_text(f"{s_text} {e_text}".strip())
+        else:
+            sdt, edt = parse_dates_from_text(text_of(b))
+
+        if not sdt:
+            continue  # cannot place in calendar
+
+        loc  = text_of(loc_el)
+        desc = text_of(desc_el)
+
+        out.append({
+            "summary": title,
+            "start": sdt.isoformat(),
+            "end": (edt or sdt).isoformat(),
+            "url": url,
+            "location": loc,
+            "description": desc
+        })
+
     return out
 
 def extract_events_from_rss(url: str) -> List[Dict]:
@@ -235,8 +362,12 @@ def is_shrewsbury_hit(e: Dict) -> bool:
 def filter_window(evs: List[Dict]) -> List[Dict]:
     out = []
     for e in evs:
-        sdt = parse_date_any(e.get("start", ""))
-        edt = parse_date_any(e.get("end", "")) or sdt
+        sdt = parse_date_any(e.get("start", "")) or (dateparser.parse(e.get("start")) if dateparser and e.get("start") else None)
+        edt = parse_date_any(e.get("end", "")) or (dateparser.parse(e.get("end")) if dateparser and e.get("end") else sdt)
+        if sdt and sdt.tzinfo is None:
+            sdt = sdt.replace(tzinfo=timezone.utc)
+        if edt and edt.tzinfo is None:
+            edt = edt.replace(tzinfo=timezone.utc)
         if not sdt:
             continue
         if edt < WINDOW_START or sdt > WINDOW_END:
@@ -276,23 +407,39 @@ def main() -> int:
         url = src.get("url")
         if not url:
             continue
+        paginate_cfg = src.get("paginate")
+        html_cfg = src.get("fallback_html") if stype == "jsonld" else src.get("html")
         log("source:", stype, url)
 
+        evs: List[Dict] = []
         try:
             if stype == "jsonld":
-                pages = expand_paginated_jsonld(url, src.get("paginate"))
-                evs = []
-                for html in pages:
-                    evs.extend(extract_events_from_jsonld_html(html, url))
+                pages = get_pages(url, paginate_cfg)
+                # try JSON-LD first
+                for (u, html) in pages:
+                    evs.extend(extract_events_from_jsonld_html(html, u))
+                # fallback to HTML if none found or explicitly forced
+                if (not evs) and (html_cfg or src.get("force_html", False)):
+                    log("  jsonld empty; trying HTML fallback")
+                    for (u, html) in pages:
+                        evs.extend(html_fallback_extract(html, u, html_cfg))
+
+            elif stype == "html":
+                pages = get_pages(url, paginate_cfg)
+                for (u, html) in pages:
+                    evs.extend(html_fallback_extract(html, u, html_cfg))
+
             elif stype == "rss":
                 evs = extract_events_from_rss(url)
+
             elif stype == "ics":
                 evs = extract_events_from_ics(url)
+
             else:
-                evs = []
+                log("  unknown type:", stype)
+
         except Exception as ex:
             log("  error:", ex)
-            evs = []
 
         log(f"  -> {len(evs)} raw events")
         for e in evs:
