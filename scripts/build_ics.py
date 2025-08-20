@@ -1,21 +1,22 @@
 #!/usr/bin/env python3
-# scripts/build_ics.py — single-output version (shropshire-events.ics)
+# scripts/build_ics.py — single output (shropshire-events.ics) with pagination
 
 import os, re, json, hashlib, unicodedata
 from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Dict
+from urllib.parse import urljoin
 
 import requests
 from bs4 import BeautifulSoup
 import yaml
 
 try:
-    import feedparser  # RSS (optional)
+    import feedparser  # optional (RSS)
 except Exception:
     feedparser = None
 
 try:
-    from icalendar import Calendar  # ICS import (optional)
+    from icalendar import Calendar  # optional (ICS import)
 except Exception:
     Calendar = None
 
@@ -36,7 +37,7 @@ WINDOW_START = datetime.now(timezone.utc) - timedelta(days=30)
 WINDOW_END   = datetime.now(timezone.utc) + timedelta(days=730)
 
 HEADERS = {
-    "User-Agent": f"Mozilla/5.0 (compatible; ShropshireICSBot/1.3; +{HUB_URL})"
+    "User-Agent": f"Mozilla/5.0 (compatible; ShropshireICSBot/1.4; +{HUB_URL})"
 }
 
 # Hints to boost Shrewsbury events
@@ -99,8 +100,46 @@ def fetch(url: str) -> Optional[str]:
         log("ERR", ex, "for", url)
     return None
 
+# --- Pagination helpers -------------------------------------------------------
+def fetch_pages_with_next(url: str, next_selector: str, max_pages: int = 12) -> List[str]:
+    """
+    Follow 'next' links by CSS selector; return a list of HTML pages (including the first).
+    """
+    pages_html: List[str] = []
+    seen_urls = set()
+    current_url = url
+    base_for_join = url
+    for _ in range(max_pages):
+        if not current_url or current_url in seen_urls:
+            break
+        seen_urls.add(current_url)
+        html = fetch(current_url)
+        if not html:
+            break
+        pages_html.append(html)
+        try:
+            soup = BeautifulSoup(html, "lxml")
+            nxt = soup.select_one(next_selector)
+            if nxt and nxt.get("href"):
+                current_url = urljoin(base_for_join, nxt.get("href"))
+            else:
+                break
+        except Exception:
+            break
+    return pages_html
+
+def expand_paginated_jsonld(url: str, paginate_cfg: Optional[Dict]) -> List[str]:
+    """
+    Return HTML pages to parse for JSON-LD (single page or follow 'next').
+    """
+    if paginate_cfg and "next_selector" in paginate_cfg:
+        max_pages = int(paginate_cfg.get("max_pages", 12))
+        return fetch_pages_with_next(url, paginate_cfg["next_selector"], max_pages)
+    html = fetch(url)
+    return [html] if html else []
+
 # --- Extractors ---------------------------------------------------------------
-def extract_events_from_jsonld(html: str, base_url: str) -> List[Dict]:
+def extract_events_from_jsonld_html(html: str, base_url: str) -> List[Dict]:
     out: List[Dict] = []
     if not html:
         return out
@@ -241,8 +280,10 @@ def main() -> int:
 
         try:
             if stype == "jsonld":
-                html = fetch(url)
-                evs = extract_events_from_jsonld(html, url)
+                pages = expand_paginated_jsonld(url, src.get("paginate"))
+                evs = []
+                for html in pages:
+                    evs.extend(extract_events_from_jsonld_html(html, url))
             elif stype == "rss":
                 evs = extract_events_from_rss(url)
             elif stype == "ics":
@@ -267,13 +308,12 @@ def main() -> int:
     events = filter_window(events)
     log(f"[totals] after window filter: {len(events)}")
 
-    # Deduplicate by (summary, start day) and prefer Shrewsbury-tagged entries
+    # Deduplicate by (summary, start day); prefer Shrewsbury entries
     norm: Dict = {}
     for e in events:
         key = (e.get("summary") or "", e["_sdt"].strftime("%Y-%m-%d"))
         if key in norm:
             curr = norm[key]
-            # prefer Shrewsbury entries for richer info
             if e["_is_shrewsbury"] and not curr.get("_is_shrewsbury"):
                 curr.update({
                     "url": e.get("url", ""),
@@ -345,8 +385,7 @@ def main() -> int:
 
         def esc(x): return escape_ics(x) if x else ""
 
-        # Build VEVENT
-        lines = [
+        vevents.append("\n".join([
             "BEGIN:VEVENT",
             f"UID:{uid}",
             f"DTSTAMP:{dtstamp}",
@@ -362,8 +401,7 @@ def main() -> int:
             "STATUS:CONFIRMED",
             "TRANSP:TRANSPARENT",
             "END:VEVENT",
-        ]
-        vevents.append("\n".join([ln for ln in lines if ln != ""]))
+        ]))
 
     # Build VCALENDAR
     vcal = "\n".join([
